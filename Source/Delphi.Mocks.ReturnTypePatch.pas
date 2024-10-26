@@ -54,8 +54,8 @@ unit Delphi.Mocks.ReturnTypePatch;
 interface
 
 uses
-  Rtti,
-  TypInfo;
+  System.Rtti,
+  System.TypInfo;
 
 type
   ReturnTypePatchAttribute = class(TCustomAttribute)
@@ -72,7 +72,7 @@ procedure PatchMethodReturnType(AMethod: TRttiMethod; AReturnType: PTypeInfo); o
 implementation
 
 uses
-  Windows;
+  Winapi.Windows;
 
 type
   TRttiIntfMethod = class(TRttiMethod)

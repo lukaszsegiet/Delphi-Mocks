@@ -28,12 +28,12 @@ unit Delphi.Mocks.Interfaces;
 interface
 
 uses
-  SysUtils,
-  TypInfo,
-  Generics.Collections,
+  System.SysUtils,
+  System.TypInfo,
+  System.Rtti,
+  System.Generics.Collections,
   Delphi.Mocks,
-  Delphi.Mocks.ParamMatcher,
-  Rtti;
+  Delphi.Mocks.ParamMatcher;
 
 type
   TBehaviorType = (WillReturn,ReturnDefault,WillRaise,WillRaiseAlways,WillExecute,WillExecuteWhen);
@@ -74,6 +74,7 @@ type
     function GetExpectationMet : boolean;
     function Match(const Args : TArray<TValue>) : boolean;
     procedure RecordHit;
+    procedure ResetCalls;
     function Report : string;
     property ExpectationType : TExpectationType read GetExpectationType;
     property ExpectationMet : boolean read GetExpectationMet;
@@ -82,7 +83,7 @@ type
 
   IMethodData = interface
   ['{640BFB71-85C2-4ED4-A863-5AF6535BD2E8}']
-    procedure RecordHit(const Args: TArray<TValue>; const returnType : TRttiType; out Result: TValue);
+    procedure RecordHit(const Args: TArray<TValue>; const returnType : TRttiType; const method : TRttiMethod; out Result: TValue);
 
     //behaviors
     procedure WillReturnDefault(const returnValue : TValue);
@@ -111,9 +112,13 @@ type
     procedure Before(const ABeforeMethodName : string);
     procedure AfterWhen(const AAfterMethodName : string;const Args : TArray<TValue>; const matchers : TArray<IMatcher>);
     procedure After(const AAfterMethodName : string);
+    procedure ClearExpectations;
 
     //Verification
     function Verify(var report : string) : boolean;
+    procedure ResetCalls;
+
+    function FindBestBehavior(const Args: TArray<TValue>) : IBehavior;
   end;
 
   IVerify = interface
@@ -121,6 +126,7 @@ type
     procedure Verify(const message : string = '');
     procedure VerifyAll(const message : string = '');
     function CheckExpectations: string;
+    procedure ResetCalls;
   end;
 
 implementation

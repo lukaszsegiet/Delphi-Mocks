@@ -3,7 +3,7 @@ unit Delphi.Mocks.AutoMock;
 interface
 
 uses
-  TypInfo,
+  System.TypInfo,
   System.Generics.Collections,
   Delphi.Mocks,
   Delphi.Mocks.WeakReference;
@@ -24,7 +24,6 @@ type
 implementation
 
 uses
-  Windows,
   Delphi.Mocks.Validation,
   Delphi.Mocks.Proxy.TypeInfo;
 
@@ -70,7 +69,7 @@ begin
   //Push the proxy into the result we are returning.
   if proxyAsType.QueryInterface(GetTypeData(TypeInfo(IProxy)).Guid, result) <> 0 then
     //TODO: This raise seems superfluous as the only types which are created are controlled by us above. They all implement IProxy<T>
-    raise EMockNoProxyException.Create('Error casting to interface ' + ATypeInfo.NameStr + ' , proxy does not appear to implememnt IProxy');
+    raise EMockNoProxyException.Create('Error casting to interface ' + ATypeInfo.NameStr + ' , proxy does not appear to implement IProxy');
 end;
 
 end.

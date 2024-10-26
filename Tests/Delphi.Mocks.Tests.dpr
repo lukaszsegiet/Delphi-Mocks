@@ -26,28 +26,7 @@ uses
   DUnitX.Windows.Console,
   DUnitX.Loggers.XML.NUnit,
   SysUtils,
-  {$IFDEF TESTINSIGHT}
-  TestInsight.DUnitX,
-  {$ENDIF }
-  Delphi.Mocks.AutoMock in '..\Delphi.Mocks.AutoMock.pas',
-  Delphi.Mocks.Behavior in '..\Delphi.Mocks.Behavior.pas',
-  Delphi.Mocks.Expectation in '..\Delphi.Mocks.Expectation.pas',
-  Delphi.Mocks.Helpers in '..\Delphi.Mocks.Helpers.pas',
-  Delphi.Mocks.Interfaces in '..\Delphi.Mocks.Interfaces.pas',
-  Delphi.Mocks.MethodData in '..\Delphi.Mocks.MethodData.pas',
-  Delphi.Mocks.ObjectProxy in '..\Delphi.Mocks.ObjectProxy.pas',
-  Delphi.Mocks.ParamMatcher in '..\Delphi.Mocks.ParamMatcher.pas',
-  Delphi.Mocks in '..\Delphi.Mocks.pas',
-  Delphi.Mocks.Proxy in '..\Delphi.Mocks.Proxy.pas',
-  Delphi.Mocks.Proxy.TypeInfo in '..\Delphi.Mocks.Proxy.TypeInfo.pas',
-  Delphi.Mocks.ReturnTypePatch in '..\Delphi.Mocks.ReturnTypePatch.pas',
-  Delphi.Mocks.Utils in '..\Delphi.Mocks.Utils.pas',
-  Delphi.Mocks.Validation in '..\Delphi.Mocks.Validation.pas',
-  Delphi.Mocks.VirtualInterface in '..\Delphi.Mocks.VirtualInterface.pas',
-  Delphi.Mocks.VirtualMethodInterceptor in '..\Delphi.Mocks.VirtualMethodInterceptor.pas',
-  Delphi.Mocks.WeakReference in '..\Delphi.Mocks.WeakReference.pas',
-  Delphi.Mocks.When in '..\Delphi.Mocks.When.pas',
-  Sample1Main in '..\Sample1Main.pas',
+  Sample1Main in '..\Examples\Sample1Main.pas',
   Delphi.Mocks.Tests.AutoMock in 'Delphi.Mocks.Tests.AutoMock.pas',
   Delphi.Mocks.Tests.Base in 'Delphi.Mocks.Tests.Base.pas',
   Delphi.Mocks.Tests.Behavior in 'Delphi.Mocks.Tests.Behavior.pas',
@@ -63,7 +42,8 @@ uses
   Delphi.Mocks.Tests.TValue in 'Delphi.Mocks.Tests.TValue.pas',
   Delphi.Mocks.Tests.Utils in 'Delphi.Mocks.Tests.Utils.pas',
   Delphi.Mocks.Utils.Tests in 'Delphi.Mocks.Utils.Tests.pas',
-  Delphi.Mocks.Examples.Matchers in 'Delphi.Mocks.Examples.Matchers.pas';
+  Delphi.Mocks.Examples.Matchers in 'Delphi.Mocks.Examples.Matchers.pas',
+  Delphi.Mocks.Tests.Stubs in 'Delphi.Mocks.Tests.Stubs.pas';
 
 {$R *.RES}
 
@@ -121,55 +101,46 @@ var
   nunitLogger : ITestLogger;
 begin
 {$IFDEF TESTINSIGHT}
-  try
-    //note - text logger not implemented yet
-    TestInsight.DUnitX.RunRegisteredTests;
-  except
-    on e : Exception do
-    begin
-      Writeln(e.Message);
-      ReadLn;
-    end;
-  end;
+  TestInsight.DUnitX.RunRegisteredTests;
   exit;
 {$ENDIF}
   try
-    try
-      //Create the runner
-      TDUnitX.CheckCommandLine;
-      runner := TDUnitX.CreateRunner;
-      runner.UseRTTI := True;
-      runner.FailsOnNoAsserts := true;
-      //tell the runner how we will log things
-      logger := TDUnitXConsoleLogger.Create(false);
-      runner.AddLogger(logger);
+    //Check command line options, will exit if invalid
+    TDUnitX.CheckCommandLine;
+    //Create the test runner
+    runner := TDUnitX.CreateRunner;
+    //Tell the runner to use RTTI to find Fixtures
+    runner.UseRTTI := True;
+    //tell the runner how we will log things
+    //Log to the console window
+    logger := TDUnitXConsoleLogger.Create(true);
+    runner.AddLogger(logger);
+    //Generate an NUnit compatible XML File
+    if (TDUnitX.Options.XMLOutputFile <> '') then
+    begin
       nunitLogger := TDUnitXXMLNUnitFileLogger.Create(TDUnitX.Options.XMLOutputFile);
       runner.AddLogger(nunitLogger);
-
-      //Run tests
-      results := runner.Execute;
-      //Let the CI Server know that something failed.
-      if results.AllPassed then
-        System.ExitCode := 0
-      else
-        System.ExitCode := EXIT_ERRORS;
-
-      System.Writeln;
-    except
-      on E: Exception do
-        Writeln(E.ClassName, ': ', E.Message);
     end;
+    runner.FailsOnNoAsserts := False; //When true, Assertions must be made during tests;
 
-  finally
+    //Run tests
+    results := runner.Execute;
+    if not results.AllPassed then
+      System.ExitCode := EXIT_ERRORS;
+
     {$IFNDEF CI}
-    //We don;t want this happening when running under CI.
+    //We don't want this happening when running under CI.
     if TDUnitX.Options.ExitBehavior = TDUnitXExitBehavior.Pause then
     begin
       System.Write('Done.. press <Enter> key to quit.');
       System.Readln;
     end;
     {$ENDIF}
+  except
+    on E: Exception do
+      System.Writeln(E.ClassName, ': ', E.Message);
   end;
+
 
 
 end.

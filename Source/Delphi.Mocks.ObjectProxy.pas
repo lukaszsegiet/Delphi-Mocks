@@ -28,14 +28,13 @@ unit Delphi.Mocks.ObjectProxy;
 interface
 
 uses
-  Rtti,
-  SysUtils,
-  TypInfo,
-  Generics.Collections,
+  System.Rtti,
+  System.SysUtils,
+  System.TypInfo,
+  System.Generics.Collections,
   Delphi.Mocks,
   Delphi.Mocks.Interfaces,
-  Delphi.Mocks.Proxy,
-  Delphi.Mocks.VirtualMethodInterceptor;
+  Delphi.Mocks.Proxy;
 
 type
   TObjectProxy<T> = class(TProxy<T>)
@@ -98,11 +97,14 @@ procedure TObjectProxy<T>.DoBefore(Instance: TObject; Method: TRttiMethod; const
 var
   vArgs: TArray<TValue>;
   i, l: Integer;
+  methodData : IMethodData;
+  pInfo : PTypeInfo;
 begin
   //don't intercept the TObject methods like BeforeDestruction etc.
   if Method.Parent.AsInstance.MetaclassType <> TObject then
   begin
-    DoInvoke := False; //don't call the actual method.
+    pInfo := TypeInfo(T);
+    methodData := GetMethodData(method.Name,pInfo.NameStr);
 
     //Included instance as first argument because TExpectation.Match
     //deduces that the first argument is the object instance.
@@ -114,6 +116,13 @@ begin
     begin
       vArgs[i] := Args[i-1];
     end;
+
+    //Call the original (virtual) method if:
+    //-we are not a stub
+    //-we have not defined any behavior (of course we count hits)
+    //-the actual method is not an abstract method
+    //-we are not setting up
+    DoInvoke := not (FIsStubOnly or (methodData.FindBestBehavior(vArgs) <> nil) or Method.IsAbstract or (FSetupMode <> TSetupMode.None));
 
     Self.DoInvoke(Method,vArgs,Result);
 

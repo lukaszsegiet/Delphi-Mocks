@@ -55,6 +55,9 @@ begin
   mock := TMock<IFoo>.Create;
   stub := TStub<IFoo>.Create;
 
+  //Setup our stub.
+  stub.Setup.WillReturnDefault('Bar', 'You called Bar on the stub and this is the default return value.' );
+
   //Setup the behavior of our mock.
 
   //setup a default return value for method Bar
@@ -108,13 +111,14 @@ begin
   //we expect the TestMe method to never be called
   mock.Setup.Expect.Never.When.TestMe;
 
-  //we expecte Bar to be called at lease once with a param value of 1
+  //we expect Bar to be called at lease once with a param value of 1
   mock.Setup.Expect.AtLeastOnce.When.Bar(1);
 
   mock.Setup.Expect.AtLeastOnce.When.Bar(99);
   mock.Setup.Expect.Between(2,4).When.Bar(23);
 
   mock.Setup.Expect.Exactly('Bar',5);
+
 
  //Now use our mock object
   mock.Instance.MyProp := 'hello';
@@ -129,14 +133,14 @@ begin
 
   WriteLn('Calling Bar(1) : ' + mock.Instance.Bar(1));
   WriteLn('Calling Bar(2) : ' + mock.Instance.Bar(2));
-  WriteLn('Calling Bar(2,sdfsd) : ' + mock.Instance.Bar(999,'sdfsd'));
+  WriteLn('Calling Bar(999,sdfsd) : ' + mock.Instance.Bar(999,'sdfsd'));
   WriteLn('Calling Bar(2,sdfsd) : ' + mock.Instance.Bar(2,'sdfsd'));
   WriteLn('Calling Bar(200) : ' + mock.Instance.Bar(200));
 
   WriteLn('Calling1 ReturnObject : ' + mock.Instance.ReturnObject.ClassName);
 
 
-  stub.Instance.Bar(1234);
+  WriteLn(stub.Instance.Bar(1234));
 
 
   //Test the implicit operator by calling a method that expects IFoo

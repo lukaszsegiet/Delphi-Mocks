@@ -27,11 +27,20 @@ type
   end;
 
   TCommand = class
+  private
+    FVirtualMethodCalled: Boolean;
   public
+    constructor Create;
+
     procedure Execute;virtual;abstract;
     procedure Run(value: Integer);virtual;abstract;
     procedure TestVarParam(var msg : string);virtual;abstract;
     procedure TestOutParam(out msg : string);virtual;abstract;
+    function VirtualMethod: Integer; overload; virtual;
+    function VirtualMethod(const Arg: String): Integer; overload; virtual;
+    function NonVirtualMethod: Integer;
+
+    property VirtualMethodCalled: Boolean read FVirtualMethodCalled;
   end;
 
   {$M+}
@@ -62,6 +71,18 @@ type
     procedure TestOutParam;
     [Test]
     procedure TestVarParam;
+    [Test]
+    procedure MockNoBehaviorDefined;
+    [Test]
+    procedure WillRaiseMockNonVirtualMethod;
+    [Test]
+    procedure VirtualMethodNotCalledDuringMockSetup;
+    [Test]
+    procedure VirtualMethodCalledIfNoBehaviorDefined;
+    [Test]
+    procedure VirtualMethodNotCalledIfBehaviorMatches;
+    [Test]
+    procedure VirtualMethodCalledIfBehaviorNotMatches;
   end;
   {$M-}
 
@@ -79,7 +100,10 @@ procedure TTestObjectProxy.ProxyObject_Calls_The_Create_Of_The_Object_Type;
 var
   objectProxy: IProxy<TSimpleObject>;
 begin
-  objectProxy := TObjectProxy<TSimpleObject>.Create;
+  objectProxy := TObjectProxy<TSimpleObject>.Create(function: TSimpleObject
+                                                    begin 
+                                                      result := TSimpleObject.Create; 
+                                                    end);
 
   Assert.AreEqual(objectProxy.Proxy.CreateCalled, G_CREATE_CALLED_UNIQUE_ID);
 end;
@@ -88,7 +112,10 @@ procedure TTestObjectProxy.ProxyObject_MultipleConstructor;
 var
   objectProxy: IProxy<TMultipleConstructor>;
 begin
-  objectProxy := TObjectProxy<TMultipleConstructor>.Create;
+  objectProxy := TObjectProxy<TMultipleConstructor>.Create(function: TMultipleConstructor
+                                                           begin 
+                                                             result := TMultipleConstructor.Create; 
+                                                           end);
 
   Assert.AreEqual(objectProxy.Proxy.CreateCalled, G_CREATE_CALLED_UNIQUE_ID);
 end;
@@ -145,6 +172,50 @@ begin
 
   mock.Verify;
   Assert.Pass;
+end;
+
+procedure TTestObjectProxy.VirtualMethodCalledIfBehaviorNotMatches;
+var
+  mock : TMock<TCommand>;
+begin
+  mock := TMock<TCommand>.Create;
+  mock.Setup.WillReturn(2).When.VirtualMethod('test');
+
+  Assert.AreEqual(1, mock.Instance.VirtualMethod('test2'));
+  Assert.IsTrue(mock.Instance.VirtualMethodCalled);
+end;
+
+procedure TTestObjectProxy.VirtualMethodCalledIfNoBehaviorDefined;
+var
+  mock : TMock<TCommand>;
+begin
+  mock := TMock<TCommand>.Create;
+
+  Assert.AreEqual(1, mock.Instance.VirtualMethod('test'));
+  Assert.IsTrue(mock.Instance.VirtualMethodCalled);
+end;
+
+procedure TTestObjectProxy.VirtualMethodNotCalledDuringMockSetup;
+var
+  mock : TMock<TCommand>;
+begin
+  mock := TMock<TCommand>.Create;
+  mock.Setup.Expect.AtLeastOnce.When.VirtualMethod;
+  mock.Setup.WillReturn(1).When.VirtualMethod;
+  mock.Setup.WillReturnDefault('VirtualMethod', 1);
+
+  Assert.IsFalse(mock.Instance.VirtualMethodCalled);
+end;
+
+procedure TTestObjectProxy.VirtualMethodNotCalledIfBehaviorMatches;
+var
+  mock : TMock<TCommand>;
+begin
+  mock := TMock<TCommand>.Create;
+  mock.Setup.WillReturn(2).When.VirtualMethod('test');
+  Assert.AreEqual(2, mock.Instance.VirtualMethod('test'));
+
+  Assert.IsFalse(mock.Instance.VirtualMethodCalled);
 end;
 
 procedure TTestObjectProxy.MockNoArgProcedureUsingAtLeastOnceWhen;
@@ -230,6 +301,25 @@ begin
   Assert.Pass;
 end;
 
+procedure TTestObjectProxy.MockNoBehaviorDefined;
+var
+  mock : TMock<TCommand>;
+begin
+  mock := TMock<TCommand>.Create;
+  mock.Setup.Expect.Once.When.VirtualMethod;
+  Assert.AreEqual(1, mock.Instance.VirtualMethod);
+  mock.Verify;
+end;
+
+procedure TTestObjectProxy.WillRaiseMockNonVirtualMethod;
+var
+  mock : TMock<TCommand>;
+begin
+  mock := TMock<TCommand>.Create;
+  Assert.WillRaise(procedure begin mock.Setup.Expect.Once.When.NonVirtualMethod; end);
+  Assert.WillRaise(procedure begin mock.Setup.WillReturn(2).When.NonVirtualMethod; end);
+end;
+
 procedure TTestObjectProxy.MockWithArgProcedureUsingOnce;
 var
   mock : TMock<TCommand>;
@@ -260,6 +350,30 @@ begin
   FCreateCalled := G_CREATE_CALLED_UNIQUE_ID;
 end;
 
+
+{ TCommand }
+
+constructor TCommand.Create;
+begin
+  FVirtualMethodCalled := False;
+end;
+
+function TCommand.NonVirtualMethod: Integer;
+begin
+  Result := 1;
+end;
+
+function TCommand.VirtualMethod(const Arg: String): Integer;
+begin
+  FVirtualMethodCalled := True;
+  Result := 1;
+end;
+
+function TCommand.VirtualMethod: Integer;
+begin
+  FVirtualMethodCalled := True;
+  Result := 1;
+end;
 
 initialization
   TDUnitX.RegisterTestFixture(TTestObjectProxy);

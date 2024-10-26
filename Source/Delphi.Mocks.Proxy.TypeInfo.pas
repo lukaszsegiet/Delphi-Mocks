@@ -28,10 +28,10 @@ unit Delphi.Mocks.Proxy.TypeInfo;
 interface
 
 uses
-  Rtti,
-  SysUtils,
-  Generics.Collections,
-  TypInfo,
+  System.Rtti,
+  System.SysUtils,
+  System.Generics.Collections,
+  System.TypInfo,
   Delphi.Mocks,
   Delphi.Mocks.Proxy,
   Delphi.Mocks.WeakReference,
@@ -111,6 +111,7 @@ type
     //IVerify
     procedure Verify(const message : string = '');
     procedure VerifyAll(const message : string = '');
+    procedure ResetCalls;
 
     function CheckExpectations: string;
 
@@ -130,8 +131,7 @@ uses
   Delphi.Mocks.Utils,
   Delphi.Mocks.When,
   Delphi.Mocks.MethodData,
-  Delphi.Mocks.ParamMatcher,
-  Windows;
+  Delphi.Mocks.ParamMatcher;
 
 {TProxy}
 
@@ -160,7 +160,7 @@ end;
 //  methodData : IMethodData;
 //begin
 //  pInfo := TypeInfo(T);
-//  methodData := GetMethodData(AMethodName,pInfo.NameStr);
+//  methodData := GetMethodData(AMethodName, pInfo.NameStr);
 //  Assert(methodData <> nil);
 //  methodData.AtLeast(times);
 //  ClearSetupState;
@@ -179,7 +179,7 @@ end;
 //  methodData : IMethodData;
 //begin
 //  pInfo := TypeInfo(T);
-//  methodData := GetMethodData(AMethodName,pInfo.NameStr);
+//  methodData := GetMethodData(AMethodName, pInfo.NameStr);
 //  Assert(methodData <> nil);
 //  methodData.AtLeastOnce;
 //  ClearSetupState;
@@ -198,7 +198,7 @@ end;
 //  methodData : IMethodData;
 //begin
 //  pInfo := TypeInfo(T);
-//  methodData := GetMethodData(AMethodName,pInfo.NameStr);
+//  methodData := GetMethodData(AMethodName, pInfo.NameStr);
 //  Assert(methodData <> nil);
 //  methodData.AtMost(times);
 //  ClearSetupState;
@@ -222,14 +222,14 @@ end;
 //  raise Exception.Create('not implemented');
 //end;
 //
-//procedure TProxy.Between(const AMethodName: string; const a,  b: Cardinal);
+//procedure TProxy.Between(const AMethodName: string; const a, b: Cardinal);
 //var
 //  methodData : IMethodData;
 //begin
 //  pInfo := TypeInfo(T);
-//  methodData := GetMethodData(AMethodName,pInfo.NameStr);
+//  methodData := GetMethodData(AMethodName, pInfo.NameStr);
 //  Assert(methodData <> nil);
-//  methodData.Between(a,b);
+//  methodData.Between(a, b);
 //  ClearSetupState;
 //end;
 //
@@ -288,7 +288,7 @@ begin
 
   FSetupMode := TSetupMode.None;
   FBehaviorMustBeDefined := False;
-  FMethodData := TDictionary<string,IMethodData>.Create;
+  FMethodData := TDictionary<string, IMethodData>.Create;
   FIsStubOnly := AIsStubOnly;
 
   FInterfaceProxies := TDictionary<TGUID, IProxy>.Create;
@@ -332,9 +332,9 @@ begin
     TSetupMode.None:
     begin
       //record actual behavior
-      methodData := GetMethodData(method.Name,pInfo.NameStr);
+      methodData := GetMethodData(method.Name, pInfo.NameStr);
       Assert(methodData <> nil);
-      methodData.RecordHit(Args,Method.ReturnType,Result);
+      methodData.RecordHit(Args, Method.ReturnType, Method, Result);
     end;
     TSetupMode.Behavior:
     begin
@@ -346,7 +346,7 @@ begin
 
         //record desired behavior
         //first see if we know about this method
-        methodData := GetMethodData(method.Name,pInfo.NameStr);
+        methodData := GetMethodData(method.Name, pInfo.NameStr);
         Assert(methodData <> nil);
         case FNextBehavior of
           TBehaviorType.WillReturn:
@@ -373,11 +373,11 @@ begin
           end;
           TBehaviorType.WillRaise:
           begin
-            methodData.WillRaiseAlways(FExceptClass,FExceptionMessage);
+            methodData.WillRaiseAlways(FExceptClass, FExceptionMessage);
           end;
           TBehaviorType.WillExecuteWhen :
           begin
-            methodData.WillExecuteWhen(FNextFunc,Args, matchers);
+            methodData.WillExecuteWhen(FNextFunc, Args, matchers);
           end;
         end;
       finally
@@ -389,7 +389,7 @@ begin
       try
         //record expectations
         //first see if we know about this method
-        methodData := GetMethodData(method.Name,pInfo.NameStr);
+        methodData := GetMethodData(method.Name, pInfo.NameStr);
         Assert(methodData <> nil);
 
         matchers := TMatcherFactory.GetMatchers;
@@ -398,11 +398,11 @@ begin
           OnceWhen        : methodData.OnceWhen(Args, matchers);
           NeverWhen       : methodData.NeverWhen(Args, matchers) ;
           AtLeastOnceWhen : methodData.AtLeastOnceWhen(Args, matchers);
-          AtLeastWhen     : methodData.AtLeastWhen(FTimes,args, matchers);
+          AtLeastWhen     : methodData.AtLeastWhen(FTimes, args, matchers);
           AtMostOnceWhen  : methodData.AtLeastOnceWhen(Args, matchers);
-          AtMostWhen      : methodData.AtMostWhen(FTimes,args, matchers);
-          BetweenWhen     : methodData.BetweenWhen(FBetween[0],FBetween[1],Args, matchers) ;
-          ExactlyWhen     : methodData.ExactlyWhen(FTimes,Args, matchers);
+          AtMostWhen      : methodData.AtMostWhen(FTimes, args, matchers);
+          BetweenWhen     : methodData.BetweenWhen(FBetween[0], FBetween[1], Args, matchers) ;
+          ExactlyWhen     : methodData.ExactlyWhen(FTimes, Args, matchers);
           BeforeWhen      : raise exception.Create('not implemented') ;
           AfterWhen       : raise exception.Create('not implemented');
         end;
@@ -436,12 +436,16 @@ var
   setupParams: TSetupMethodDataParameters;
 begin
   methodName := LowerCase(AMethodName);
-  if FMethodData.TryGetValue(methodName,Result) then
+  if FMethodData.TryGetValue(methodName, Result) then
     exit;
 
   setupParams := TSetupMethodDataParameters.Create(FIsStubOnly, FBehaviorMustBeDefined, FAllowRedefineBehaviorDefinitions);
+{$IFNDEF NEXTGEN}
   Result := TMethodData.Create(string(FTypeInfo.Name), AMethodName, setupParams, FAutoMocker);
-  FMethodData.Add(methodName,Result);
+{$ELSE}
+  Result := TMethodData.Create(FTypeInfo.NameFld.ToString, AMethodName, setupParams, FAutoMocker);
+{$ENDIF}
+  FMethodData.Add(methodName, Result);
 end;
 
 function TProxy.QueryImplementedInterface(const IID: TGUID; out Obj): HRESULT;
@@ -465,7 +469,7 @@ begin
         Exit;
     end;
 
-    {$Message 'TODO: Need to query the parent, but exclude outselves and any other children which have already been called.'}
+    {$Message 'TODO: Need to query the parent, but exclude ourselves and any other children which have already been called.'}
 
     //Call the parent.
     if FParentProxy <> nil then
@@ -504,7 +508,7 @@ end;
 //var
 //  methodData : IMethodData;
 //begin
-//  methodData := GetMethodData(AMethodName,pInfo.NameStr);
+//  methodData := GetMethodData(AMethodName, pInfo.NameStr);
 //  Assert(methodData <> nil);
 //  methodData.Once;
 //  ClearSetupState;
@@ -515,10 +519,10 @@ end;
 //  virtualProxy : IInterface;
 //begin
 //  if FVirtualInterface = nil then
-//    raise EMockNoProxyException.CreateFmt('Error casting to interface [%s], proxy does not appear to implememnt T', [FTypeInfo.NameStr]);
+//    raise EMockNoProxyException.CreateFmt('Error casting to interface [%s], proxy does not appear to implement T', [FTypeInfo.NameStr]);
 //
 //  if FVirtualInterface.QueryInterface(GetTypeData(FTypeInfo).Guid, result) <> 0 then
-//    raise EMockNoProxyException.CreateFmt('Error casting to interface, proxy does not appear to implememnt T', [FTypeInfo.NameStr]);
+//    raise EMockNoProxyException.CreateFmt('Error casting to interface, proxy does not appear to implement T', [FTypeInfo.NameStr]);
 //end;
 
 function TProxy.QueryInterface(const IID: TGUID; out Obj): HRESULT;
@@ -539,6 +543,16 @@ begin
       Exit;
   finally
     FQueryingInterface := False;
+  end;
+end;
+
+procedure TProxy.ResetCalls;
+var
+  methodData : IMethodData;
+begin
+  for methodData in FMethodData.Values do
+  begin
+    methodData.ResetCalls;
   end;
 end;
 
@@ -594,10 +608,10 @@ end;
 function TProxy.ProxyInterface: IInterface;
 begin
   if FVirtualInterface = nil then
-    raise EMockNoProxyException.CreateFmt('Error casting to interface [%s], proxy does not appear to implememnt T', [FTypeInfo.NameStr]);
+    raise EMockNoProxyException.CreateFmt('Error casting to interface [%s], proxy does not appear to implement T', [FTypeInfo.NameStr]);
 
   if FVirtualInterface.QueryInterface(GetTypeData(FTypeInfo).Guid, result) <> 0 then
-    raise EMockNoProxyException.CreateFmt('Error casting to interface [%s], proxy does not appear to implememnt T', [FTypeInfo.NameStr]);
+    raise EMockNoProxyException.CreateFmt('Error casting to interface [%s], proxy does not appear to implement T', [FTypeInfo.NameStr]);
 end;
 
 procedure TProxy.Verify(const message: string);
@@ -624,7 +638,7 @@ end;
 //begin
 //  //actually record the behaviour here!
 //  pInfo := TypeInfo(T);
-//  methodData := GetMethodData(AMethodName,pInfo.NameStr);
+//  methodData := GetMethodData(AMethodName, pInfo.NameStr);
 //  Assert(methodData <> nil);
 //  methodData.WillExecute(func);
 //  ClearSetupState;
@@ -648,7 +662,7 @@ end;
 //  pInfo := TypeInfo(T);
 //  methodData := GetMethodData(AMethodName, pInfo.NameStr);
 //  Assert(methodData <> nil);
-//  methodData.WillRaiseAlways(exceptionClass,message);
+//  methodData.WillRaiseAlways(exceptionClass, message);
 //  ClearSetupState;
 //end;
 //
@@ -667,7 +681,7 @@ end;
 //begin
 //  //actually record the behaviour here!
 //  pInfo := TypeInfo(T);
-//  methodData := GetMethodData(AMethodName,pInfo.NameStr);
+//  methodData := GetMethodData(AMethodName, pInfo.NameStr);
 //  Assert(methodData <> nil);
 //  methodData.WillReturnDefault(value);
 //  ClearSetupState;
@@ -769,7 +783,7 @@ var
   interfaceV : IVerify;
 begin
   //Verify ourselves.
-  Verify;
+  Verify(message);
 
   //Now verify all our children.
   for proxy in FInterfaceProxies.Values.ToArray do

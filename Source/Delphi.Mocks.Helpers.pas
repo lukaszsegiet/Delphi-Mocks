@@ -33,7 +33,7 @@ unit Delphi.Mocks.Helpers;
 interface
 
 uses
-  Rtti;
+  System.Rtti;
 
 type
   //TValue really needs to have an Equals operator overload!
@@ -63,6 +63,9 @@ type
     function IsVariant: Boolean;
     function IsWord: Boolean;
   	function IsGuid: Boolean;
+    function IsInterface : Boolean;
+    function IsRecord : Boolean;
+    function IsArray : Boolean;
     function AsDouble: Double;
     function AsFloat: Extended;
     function AsSingle: Single;
@@ -76,7 +79,13 @@ type
     function FindConstructor : TRttiMethod;
   end;
 
+  TRttiMethodHelper = class helper for TRttiMethod
+    function IsAbstract: Boolean;
+    function IsVirtual: Boolean;
+  end;
 
+function CompareValue_Array(const Left, Right: TValue): Integer;
+function CompareValue_Record(const Left, Right: TValue): Integer;
 function CompareValue(const Left, Right: TValue): Integer;
 function SameValue(const Left, Right: TValue): Boolean;
 
@@ -84,144 +93,93 @@ function SameValue(const Left, Right: TValue): Boolean;
 implementation
 
 uses
-  SysUtils,
-  Math,
-  TypInfo;
+  System.SysUtils,
+  System.Math,
+  System.TypInfo,
+  System.Variants,
+  System.StrUtils;
 
 var
   Context : TRttiContext;
 
+//adapted from Spring4D
+
 function CompareValue(const Left, Right: TValue): Integer;
+const
+  EmptyResults: array[Boolean, Boolean] of Integer = ((0, -1), (1, 0));
+var
+  leftIsEmpty, rightIsEmpty: Boolean;
 begin
-  if Left.IsOrdinal and Right.IsOrdinal then
+  leftIsEmpty := left.IsEmpty;
+  rightIsEmpty := right.IsEmpty;
+  if leftIsEmpty or rightIsEmpty then
+    Result := EmptyResults[leftIsEmpty, rightIsEmpty]
+  else if left.IsOrdinal and right.IsOrdinal then
+    Result := System.Math.CompareValue(left.AsOrdinal, right.AsOrdinal)
+  else if left.IsFloat and right.IsFloat then
+    Result := System.Math.CompareValue(left.AsExtended, right.AsExtended)
+  else if left.IsString and right.IsString then
+    Result := System.SysUtils.AnsiCompareStr(left.AsString, right.AsString)
+  else if left.IsObject and right.IsObject then begin
+    Result := NativeInt(left.AsObject) - NativeInt(right.AsObject);
+    if Result <> 0 then begin
+      if left.AsObject.Equals(right.AsObject) then
+        Result := 0;
+    end;
+  end else if Left.IsInterface and Right.IsInterface then
+    Result := NativeInt(left.AsInterface) - NativeInt(right.AsInterface) // TODO: instance comparer
+  else if Left.IsRecord and Right.IsRecord then
+    Result := CompareValue_Record(Left, Right)
+  else if Left.IsArray and Right.IsArray then
+    Result := CompareValue_Array(Left, Right)
+  else if left.IsVariant and right.IsVariant then
   begin
-    Result := Math.CompareValue(Left.AsOrdinal, Right.AsOrdinal);
+    case VarCompareValue(left.AsVariant, right.AsVariant) of
+      vrEqual: Result := 0;
+      vrLessThan: Result := -1;
+      vrGreaterThan: Result := 1;
+      vrNotEqual: Result := -1;
+    else
+      Result := 0;
+    end;
   end else
-  if Left.IsFloat and Right.IsFloat then
-  begin
-    Result := Math.CompareValue(Left.AsFloat, Right.AsFloat);
-  end else
-  if Left.IsString and Right.IsString then
-  begin
-    Result := SysUtils.CompareStr(Left.AsString, Right.AsString);
-  end else
-  begin
     Result := 0;
+end;
+
+function CompareValue_Array(const Left, Right: TValue): Integer;
+var
+  i: Integer;
+begin
+  Result := Left.GetArrayLength - Right.GetArrayLength;
+
+  if Result = 0 then begin
+    for i := 0 to Left.GetArrayLength - 1 do begin
+      Result := CompareValue(Left.GetArrayElement(i), Right.GetArrayElement(i));
+      if Result <> 0 then
+        Exit;
+    end;
   end;
+end;
+
+function CompareValue_Record(const Left, Right: TValue): Integer;
+var
+  LMethod: TRttiMethod;
+begin
+  if Left.RttiType.TryGetMethod('&op_Equality', LMethod) then begin
+    if LMethod.Invoke(nil, [Left, Right]).AsBoolean then
+      Result := 0
+    else
+      Result := -1;
+  end else
+    Result := 0;
 end;
 
 function SameValue(const Left, Right: TValue): Boolean;
 begin
-  if Left.IsNumeric and Right.IsNumeric then
-  begin
-    if Left.IsOrdinal then
-    begin
-      if Right.IsOrdinal then
-      begin
-        Result := Left.AsOrdinal = Right.AsOrdinal;
-      end else
-      if Right.IsSingle then
-      begin
-        Result := Math.SameValue(Left.AsOrdinal, Right.AsSingle);
-      end else
-      if Right.IsDouble then
-      begin
-        Result := Math.SameValue(Left.AsOrdinal, Right.AsDouble);
-      end
-      else
-      begin
-        Result := Math.SameValue(Left.AsOrdinal, Right.AsExtended);
-      end;
-    end else
-    if Left.IsSingle then
-    begin
-      if Right.IsOrdinal then
-      begin
-        Result := Math.SameValue(Left.AsSingle, Right.AsOrdinal);
-      end else
-      if Right.IsSingle then
-      begin
-        Result := Math.SameValue(Left.AsSingle, Right.AsSingle);
-      end else
-      if Right.IsDouble then
-      begin
-        Result := Math.SameValue(Left.AsSingle, Right.AsDouble);
-      end
-      else
-      begin
-        Result := Math.SameValue(Left.AsSingle, Right.AsExtended);
-      end;
-    end else
-    if Left.IsDouble then
-    begin
-      if Right.IsOrdinal then
-      begin
-        Result := Math.SameValue(Left.AsDouble, Right.AsOrdinal);
-      end else
-      if Right.IsSingle then
-      begin
-        Result := Math.SameValue(Left.AsDouble, Right.AsSingle);
-      end else
-      if Right.IsDouble then
-      begin
-        Result := Math.SameValue(Left.AsDouble, Right.AsDouble);
-      end
-      else
-      begin
-        Result := Math.SameValue(Left.AsDouble, Right.AsExtended);
-      end;
-    end
-    else
-    begin
-      if Right.IsOrdinal then
-      begin
-        Result := Math.SameValue(Left.AsExtended, Right.AsOrdinal);
-      end else
-      if Right.IsSingle then
-      begin
-        Result := Math.SameValue(Left.AsExtended, Right.AsSingle);
-      end else
-      if Right.IsDouble then
-      begin
-        Result := Math.SameValue(Left.AsExtended, Right.AsDouble);
-      end
-      else
-      begin
-        Result := Math.SameValue(Left.AsExtended, Right.AsExtended);
-      end;
-    end;
-  end else
-  if Left.IsString and Right.IsString then
-  begin
-    Result := Left.AsString = Right.AsString;
-  end else
-  if Left.IsClass and Right.IsClass then
-  begin
-    Result := Left.AsClass = Right.AsClass;
-  end else
-  if Left.IsObject and Right.IsObject then
-  begin
-    Result := Left.AsObject = Right.AsObject;
-  end else
-  if Left.IsPointer and Right.IsPointer then
-  begin
-    Result := Left.AsPointer = Right.AsPointer;
-  end else
-  if Left.IsVariant and Right.IsVariant then
-  begin
-    Result := Left.AsVariant = Right.AsVariant;
-  end else
   if Left.IsGuid and Right.IsGuid then
-  begin
-    Result := IsEqualGuid( Left.AsType<TGUID>, Right.AsType<TGUID> );
-  end else
-  if Left.TypeInfo = Right.TypeInfo then
-  begin
-    Result := Left.AsPointer = Right.AsPointer;
-  end else
-  begin
-    Result := False;
-  end;
+    Result := IsEqualGuid( Left.AsType<TGUID>, Right.AsType<TGUID> )
+  else
+    result := CompareValue(left, right) = 0;
 end;
 
 { TValueHelper }
@@ -255,6 +213,11 @@ function TValueHelper.GetRttiType: TRttiType;
 begin
    Result := Context.GetType(TypeInfo);
 
+end;
+
+function TValueHelper.IsArray: Boolean;
+begin
+  Result := Kind in [tkArray, tkDynArray];
 end;
 
 function TValueHelper.IsBoolean: Boolean;
@@ -307,6 +270,11 @@ begin
   Result := TypeInfo = System.TypeInfo(Integer);
 end;
 
+function TValueHelper.IsInterface: Boolean;
+begin
+  Result := Kind = tkInterface;
+end;
+
 function TValueHelper.IsNumeric: Boolean;
 begin
   Result := Kind in [tkInteger, tkChar, tkEnumeration, tkFloat, tkWChar, tkInt64];
@@ -315,6 +283,11 @@ end;
 function TValueHelper.IsPointer: Boolean;
 begin
   Result := Kind = tkPointer;
+end;
+
+function TValueHelper.IsRecord: Boolean;
+begin
+  Result := RttiType.IsRecord;
 end;
 
 function TValueHelper.IsShortInt: Boolean;
@@ -386,6 +359,18 @@ function TRttiTypeHelper.TryGetMethod(const AName: string; out AMethod: TRttiMet
 begin
   AMethod := GetMethod(AName);
   Result := Assigned(AMethod);
+end;
+
+{ TRttiMethodHelper }
+
+function TRttiMethodHelper.IsAbstract: Boolean;
+begin
+  Result := PVmtMethodExEntry(Handle).Flags and (1 shl 7) <> 0;
+end;
+
+function TRttiMethodHelper.IsVirtual: Boolean;
+begin
+  Result := DispatchKind = dkVtable;
 end;
 
 end.

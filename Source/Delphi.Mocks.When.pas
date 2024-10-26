@@ -23,39 +23,45 @@
 {                                                                           }
 {***************************************************************************}
 
-unit Delphi.Mocks.VirtualInterface;
+unit Delphi.Mocks.When;
 
 interface
-{$I 'Delphi.Mocks.inc'}
-
 
 uses
-  TypInfo,
-  Rtti,
-  Generics.Collections;
+  Delphi.Mocks;
 
 type
-  {$IFDEF DELPHI_XE2_UP}
-    TVirtualInterface = System.Rtti.TVirtualInterface;
-  {$ELSE}
-    //Attempt to create a cleanish room implementation of this class for D2010??
-  {$ENDIF}
-
-
+  TWhen<T> = class(TInterfacedObject,IWhen<T>)
+  private
+   FProxy : T;
+  protected
+   function When : T;
+  public
+    constructor Create(const AProxy : T);
+    destructor Destroy;override;
+  end;
 
 implementation
 
 uses
-  RTLConsts,
-  SysUtils
-  {$IFDEF DELPHI_XE2_UP}
-   ;
-  {$ELSE}
-  ,PrivateHeap;
-  {$ENDIF}
+  System.SysUtils;
 
-{$IFNDEF DELPHI_XE2_UP}
+{ TWhen<T> }
 
-{$ENDIF}
+constructor TWhen<T>.Create(const AProxy: T);
+begin
+  FProxy := AProxy;
+end;
+
+destructor TWhen<T>.Destroy;
+begin
+  FProxy := Default(T);
+  inherited;
+end;
+
+function TWhen<T>.When: T;
+begin
+  result := FProxy;
+end;
 
 end.

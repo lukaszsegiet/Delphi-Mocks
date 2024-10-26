@@ -30,12 +30,11 @@ interface
 {$I 'Delphi.Mocks.inc'}
 
 uses
-  TypInfo,
-  Rtti,
-  Sysutils,
-  {$IFDEF SUPPORTS_REGEX}
+  System.TypInfo,
+  System.Rtti,
+  System.Sysutils,
   System.RegularExpressions,
-  {$ENDIF}
+  System.Generics.Defaults,
   Delphi.Mocks.WeakReference;
 
 type
@@ -60,7 +59,7 @@ type
     function AtMost(const times : Cardinal) : IWhen<T>;overload;
     procedure AtMost(const AMethodName : string; const times : Cardinal);overload;
 
-    function Between(const a,b : Cardinal) : IWhen<T>;overload;
+    function Between(const a, b : Cardinal) : IWhen<T>;overload;
     procedure Between(const AMethodName : string; const a,b : Cardinal);overload;
 
     function Exactly(const times : Cardinal) : IWhen<T>;overload;
@@ -71,6 +70,8 @@ type
 
     function After(const AMethodName : string) : IWhen<T>;overload;
     procedure After(const AMethodName : string; const AAfterMethodName : string);overload;
+
+    procedure Clear;
   end;
 
   IWhen<T> = interface
@@ -210,6 +211,7 @@ type
     procedure Verify(const message : string = ''); overload;
     procedure Verify<I : IInterface>(const message : string = ''); overload;
     procedure VerifyAll(const message : string = '');
+    procedure ResetCalls;
 
     function CheckExpectations: string;
     procedure Implement<I : IInterface>; overload;
@@ -238,23 +240,29 @@ type
   ///  Used for defining permissable parameter values during method setup.
   ///  Inspired by Moq
   ItRec = record
-    var
-      ParamIndex : cardinal;
+  private
+    ParamIndex : cardinal;
 
+    function DefaultComparer<T>: IEqualityComparer<T>;
+  public
     constructor Create(const AParamIndex : Integer);
 
     function IsAny<T>() : T ;
     function Matches<T>(const predicate: TPredicate<T>) : T;
-    function IsNotNil<T> : T;
-    function IsEqualTo<T>(const value : T) : T;
+    function IsNotNil<T> : T; overload;
+    function IsNotNil<T>(const comparer: IEqualityComparer<T>) : T; overload;
+    function IsEqualTo<T>(const value : T) : T; overload;
+    function IsEqualTo<T>(const value : T; const comparer: IEqualityComparer<T>) : T; overload;
     function IsInRange<T>(const fromValue : T; const toValue : T) : T;
     function IsIn<T>(const values : TArray<T>) : T; overload;
+    function IsIn<T>(const values : TArray<T>; const comparer: IEqualityComparer<T>) : T; overload;
     function IsIn<T>(const values : IEnumerable<T>) : T; overload;
+    function IsIn<T>(const values : IEnumerable<T>; const comparer: IEqualityComparer<T>) : T; overload;
     function IsNotIn<T>(const values : TArray<T>) : T; overload;
+    function IsNotIn<T>(const values : TArray<T>; const comparer: IEqualityComparer<T>) : T; overload;
     function IsNotIn<T>(const values : IEnumerable<T>) : T; overload;
-    {$IFDEF SUPPORTS_REGEX} //XE2 or later
+    function IsNotIn<T>(const values : IEnumerable<T>; const comparer: IEqualityComparer<T>) : T; overload;
     function IsRegex(const regex : string; const options : TRegExOptions = []) : string;
-    {$ENDIF}
     function AreSamePropertiesThat<T>(const Value: T): T;
     function AreSameFieldsThat<T>(const Value: T): T;
     function AreSameFieldsAndPropertiedThat<T>(const Value: T): T;
@@ -294,7 +302,7 @@ type
 implementation
 
 uses
-  Classes,
+  System.Classes,
   Generics.Defaults,
   Delphi.Mocks.Utils,
   Delphi.Mocks.Interfaces,
@@ -303,7 +311,10 @@ uses
   Delphi.Mocks.ParamMatcher,
   Delphi.Mocks.AutoMock,
   Delphi.Mocks.Validation,
-  Delphi.Mocks.Helpers;
+  Delphi.Mocks.Helpers
+{$IFDEF HAS_SYSTEM_HASH}
+  ,System.Hash
+{$ENDIF};
 
 procedure TMock<T>.CheckCreated;
 var
@@ -321,7 +332,6 @@ end;
 
 function TMock<T>.CheckExpectations: string;
 var
-  su : IMockSetup<T>;
   v : IVerify;
 begin
   CheckCreated;
@@ -369,7 +379,7 @@ begin
   //Push the proxy into the result we are returning.
   if proxy.QueryInterface(GetTypeData(TypeInfo(IProxy<T>)).Guid, Result.FProxy) <> 0 then
     //TODO: This raise seems superfluous as the only types which are created are controlled by us above. They all implement IProxy<T>
-    raise EMockNoProxyException.Create('Error casting to interface ' + pInfo.NameStr + ' , proxy does not appear to implememnt IProxy<T>');
+    raise EMockNoProxyException.Create('Error casting to interface ' + pInfo.NameStr + ' , proxy does not appear to implement IProxy<T>');
 
   //The record has been created!
   Result.FCreated := True;
@@ -452,6 +462,18 @@ begin
   CheckCreated;
 
   result := TValue.From<I>(Self.Instance<I>);
+end;
+
+procedure TMock<T>.ResetCalls;
+var
+  interfaceV : IVerify;
+begin
+  CheckCreated;
+
+  if Supports(FProxy.Setup, IVerify, interfaceV) then
+    interfaceV.ResetCalls
+  else
+    raise EMockException.Create('Could not cast Setup to IVerify interface!');
 end;
 
 function TMock<T>.Setup: IMockSetup<T>;
@@ -594,7 +616,7 @@ begin
   //Push the proxy into the result we are returning.
   if proxy.QueryInterface(GetTypeData(TypeInfo(IStubProxy<T>)).Guid, Result.FProxy) <> 0 then
     //TODO: This raise seems superfluous as the only types which are created are controlled by us above. They all implement IProxy<T>
-    raise EMockNoProxyException.Create('Error casting to interface ' + pInfo.NameStr + ' , proxy does not appear to implememnt IProxy<T>');
+    raise EMockNoProxyException.Create('Error casting to interface ' + pInfo.NameStr + ' , proxy does not appear to implement IProxy<T>');
 end;
 
 procedure TStub<T>.Free;
@@ -700,6 +722,33 @@ begin
   ParamIndex := AParamIndex;
 end;
 
+function ItRec.DefaultComparer<T>: IEqualityComparer<T>;
+var
+  LCtx: TRttiContext;
+  LType: TRttiType;
+  LMethod: TRttiMethod;
+begin
+  Result := TEqualityComparer<T>.Default;
+
+  LType := LCtx.GetType(TypeInfo(T));
+  if LType.IsRecord then
+    if LType.TryGetMethod('&op_Equality', LMethod) then begin
+      Result := TEqualityComparer<T>.Construct(
+        function(const Left, Right: T): Boolean
+        begin
+          Result := LMethod.Invoke(nil, [TValue.From<T>(Left), TValue.From<T>(Right)]).AsBoolean;
+        end,
+        function(const Value: T): Integer
+        begin
+{$IFDEF HAS_SYSTEM_HASH}
+          Result := THashBobJenkins.GetHashValue(Value, SizeOf(Value));
+{$ELSE}
+          Result := BobJenkinsHash(Value, SizeOf(Value), 0);
+{$ENDIF}
+        end);
+    end;
+end;
+
 function ItRec.IsAny<T>: T;
 begin
   result := Default(T);
@@ -710,31 +759,43 @@ begin
     end);
 end;
 
-function ItRec.IsEqualTo<T>(const value : T) : T;
+function ItRec.IsEqualTo<T>(const value: T;
+  const comparer: IEqualityComparer<T>): T;
 begin
   Result := Value;
 
   TMatcherFactory.Create<T>(ParamIndex,
     function(param : T) : boolean
-    var
-      comparer : IEqualityComparer<T>;
     begin
-      comparer := TEqualityComparer<T>.Default;
       result := comparer.Equals(param,value);
     end);
 end;
 
+function ItRec.IsEqualTo<T>(const value : T) : T;
+begin
+  Result := IsEqualTo<T>(value, DefaultComparer<T>);
+end;
+
 function ItRec.IsIn<T>(const values: TArray<T>): T;
+begin
+  Result := IsIn<T>(values, DefaultComparer<T>);
+end;
+
+function ItRec.IsIn<T>(const values: IEnumerable<T>): T;
+begin
+  Result := IsIn<T>(values, DefaultComparer<T>);
+end;
+
+function ItRec.IsIn<T>(const values: IEnumerable<T>;
+  const comparer: IEqualityComparer<T>): T;
 begin
   result := Default(T);
   TMatcherFactory.Create<T>(ParamIndex,
     function(param : T) : boolean
     var
-      comparer : IEqualityComparer<T>;
       value : T;
     begin
       result := false;
-      comparer := TEqualityComparer<T>.Default;
       for value in values do
       begin
         result := comparer.Equals(param,value);
@@ -744,20 +805,19 @@ begin
     end);
 end;
 
-function ItRec.IsIn<T>(const values: IEnumerable<T>): T;
+function ItRec.IsIn<T>(const values: TArray<T>;
+  const comparer: IEqualityComparer<T>): T;
 begin
   result := Default(T);
   TMatcherFactory.Create<T>(ParamIndex,
     function(param : T) : boolean
     var
-      comparer : IEqualityComparer<T>;
       value : T;
     begin
       result := false;
-      comparer := TEqualityComparer<T>.Default;
       for value in values do
       begin
-        result := comparer.Equals(param,value);
+        result := comparer.Equals(param, value);
         if result then
           exit;
       end;
@@ -771,38 +831,45 @@ end;
 
 function ItRec.IsNotIn<T>(const values: TArray<T>): T;
 begin
-  result := Default(T);
-  TMatcherFactory.Create<T>(ParamIndex,
-    function(param : T) : boolean
-    var
-      comparer : IEqualityComparer<T>;
-      value : T;
-    begin
-      result := true;
-      comparer := TEqualityComparer<T>.Default;
-      for value in values do
-      begin
-        if comparer.Equals(param,value) then
-          exit(false);
-      end;
-    end);
-
+  Result := IsNotIn<T>(values, DefaultComparer<T>);
 end;
 
 function ItRec.IsNotIn<T>(const values: IEnumerable<T>): T;
+begin
+  Result := IsNotIn<T>(values, DefaultComparer<T>);
+end;
+
+function ItRec.IsNotIn<T>(const values: IEnumerable<T>;
+  const comparer: IEqualityComparer<T>): T;
 begin
   result := Default(T);
   TMatcherFactory.Create<T>(ParamIndex,
     function(param : T) : boolean
     var
-      comparer : IEqualityComparer<T>;
       value : T;
     begin
       result := true;
-      comparer := TEqualityComparer<T>.Default;
       for value in values do
       begin
-        if comparer.Equals(param,value) then
+        if comparer.Equals(param, value) then
+          exit(false);
+      end;
+    end);
+end;
+
+function ItRec.IsNotIn<T>(const values: TArray<T>;
+  const comparer: IEqualityComparer<T>): T;
+begin
+  result := Default(T);
+  TMatcherFactory.Create<T>(ParamIndex,
+    function(param : T) : boolean
+    var
+      value : T;
+    begin
+      result := true;
+      for value in values do
+      begin
+        if comparer.Equals(param, value) then
           exit(false);
       end;
     end);
@@ -810,16 +877,17 @@ end;
 
 function ItRec.IsNotNil<T>: T;
 begin
+  Result := IsNotNil<T>(DefaultComparer<T>);
+end;
+
+function ItRec.IsNotNil<T>(const comparer: IEqualityComparer<T>): T;
+begin
   result := Default(T);
   TMatcherFactory.Create<T>(ParamIndex,
     function(param : T) : boolean
-    var
-      comparer : IEqualityComparer<T>;
     begin
-      comparer := TEqualityComparer<T>.Default;
-      result := not comparer.Equals(param,Default(T));
+      result := not comparer.Equals(param, Default(T));
     end);
-
 end;
 
 function ItRec.Matches<T>(const predicate: TPredicate<T>): T;
@@ -833,17 +901,15 @@ end;
 //  result := 0;
 //end;
 
-{$IFDEF SUPPORTS_REGEX} //XE2 or later
 function ItRec.IsRegex(const regex : string; const options : TRegExOptions) : string;
 begin
   result := '';
   TMatcherFactory.Create<string>(ParamIndex,
     function(param : string) : boolean
     begin
-      result := TRegEx.IsMatch(param,regex,options)
+      result := TRegEx.IsMatch(param, regex, options)
     end);
 end;
-{$ENDIF}
 
 function It(const AParamIndx : Integer) : ItRec;
 begin

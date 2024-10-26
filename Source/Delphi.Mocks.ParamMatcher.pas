@@ -28,10 +28,10 @@ unit Delphi.Mocks.ParamMatcher;
 interface
 
 uses
-  Generics.Collections,
-  SysUtils,
-  TypInfo,
-  Rtti;
+  System.Generics.Collections,
+  System.SysUtils,
+  System.TypInfo,
+  System.Rtti;
 
 
 type
@@ -67,8 +67,8 @@ type
 implementation
 
 uses
-  Classes,
-  SyncObjs;
+  System.Classes,
+  System.SyncObjs;
 
 
 { TMatcherFactory }
@@ -90,7 +90,14 @@ end;
 
 function TMatcher<T>.Match(const value: TValue): boolean;
 begin
-  result := FPredicate(value.AsType<T>);
+  try
+    result := FPredicate(value.AsType<T>);
+  except
+    on E: EInvalidCast do
+      Result := False
+    else
+      raise;
+  end;
 end;
 
 class constructor TMatcherFactory.Create;

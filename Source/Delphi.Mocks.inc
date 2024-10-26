@@ -23,45 +23,21 @@
 {                                                                           }
 {***************************************************************************}
 
-unit Delphi.Mocks.When;
+ //Basic Version of Compiler Supported - XE2 Minimum
+{$IFDEF CONDITIONALEXPRESSIONS}  //Started being defined with D2009
+   {$IF CompilerVersion < 23.0} // Before RAD Studio XE2
+      {$DEFINE UNSUPPORTED_COMPILER_VERSION}
+   {$IFEND}
+{$ELSE}
+  {$DEFINE UNSUPPORTED_COMPILER_VERSION}
+{$ENDIF}
 
-interface
+{$IFDEF UNSUPPORTED_COMPILER_VERSION}
+  Unsupported Compiler Version (Delphi XE2 or later required!)
+{$ENDIF}
 
-uses
-  Delphi.Mocks;
+{$IF CompilerVersion > 28.0} // XE8 up
+  {$DEFINE HAS_SYSTEM_HASH}
+{$IFEND}
 
-type
-  TWhen<T> = class(TInterfacedObject,IWhen<T>)
-  private
-   FProxy : T;
-  protected
-   function When : T;
-  public
-    constructor Create(const AProxy : T);
-    destructor Destroy;override;
-  end;
 
-implementation
-
-uses
-  SysUtils;
-
-{ TWhen<T> }
-
-constructor TWhen<T>.Create(const AProxy: T);
-begin
-  FProxy := AProxy;
-end;
-
-destructor TWhen<T>.Destroy;
-begin
-  FProxy := Default(T);
-  inherited;
-end;
-
-function TWhen<T>.When: T;
-begin
-  result := FProxy;
-end;
-
-end.

@@ -29,16 +29,14 @@ interface
 
 
 uses
-  Rtti,
+  System.Rtti,
   Delphi.Mocks,
   Delphi.Mocks.ParamMatcher,
   Delphi.Mocks.Interfaces,
   Delphi.Mocks.Utils;
 
-
-//disable warnings about c++ compatibility, since we don't intend to support it.
-{$WARN DUPLICATE_CTOR_DTOR OFF}
-//for some reason this doesn't work.. this should override the project settings.
+//NOTE : To disable warnings about c++ compatibility Add the following to your dpr
+//{$WARN DUPLICATE_CTOR_DTOR OFF}
 
 type
   TExpectation = class(TInterfacedObject,IExpectation)
@@ -61,6 +59,7 @@ type
     function Report : string;
     function ArgsToString : string;
     procedure CopyArgs(const Args: TArray<TValue>);
+    procedure ResetCalls;
     constructor Create(const AMethodName : string);
     constructor CreateWhen(const AMethodName : string; const Args: TArray<TValue>; const matchers : TArray<IMatcher>);
   public
@@ -98,7 +97,7 @@ type
 implementation
 
 uses
-  SysUtils,
+  System.SysUtils,
   Delphi.Mocks.Helpers;
 
 { TExpectation }
@@ -409,6 +408,12 @@ begin
     result := 'Expectation [ ' + result + ' ] was not met.';
   end;
 
+end;
+
+procedure TExpectation.ResetCalls;
+begin
+  FHitCount := 0;
+  CheckExpectationMet;
 end;
 
 end.
